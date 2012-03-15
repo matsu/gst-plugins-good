@@ -1208,16 +1208,14 @@ gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc)
           b_mask = 0xff0000;
           break;
         case V4L2_PIX_FMT_RGB32:
-          bpp = 32;
-          depth = 24;
+          bpp = depth = 32;
           endianness = G_BIG_ENDIAN;
           r_mask = 0xff000000;
           g_mask = 0x00ff0000;
           b_mask = 0x0000ff00;
           break;
         case V4L2_PIX_FMT_BGR32:
-          bpp = 32;
-          depth = 24;
+          bpp = depth = 32;
           endianness = G_BIG_ENDIAN;
           r_mask = 0x000000ff;
           g_mask = 0x0000ff00;
@@ -1482,10 +1480,9 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
 #endif
     }
   } else if (!strcmp (mimetype, "video/x-raw-rgb")) {
-    gint bpp, depth, endianness, r_mask;
+    gint depth, endianness, r_mask;
 
     gst_structure_get_int (structure, "depth", &depth);
-    gst_structure_get_int (structure, "bpp", &bpp);
     gst_structure_get_int (structure, "endianness", &endianness);
     gst_structure_get_int (structure, "red_mask", &r_mask);
 
@@ -1502,10 +1499,10 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
             V4L2_PIX_FMT_RGB565 : V4L2_PIX_FMT_RGB565X;
         break;
       case 24:
-        if (bpp == 24)
-          fourcc = (r_mask == 0xFF) ? V4L2_PIX_FMT_BGR24 : V4L2_PIX_FMT_RGB24;
-        else if (bpp == 32)
-          fourcc = (r_mask == 0xFF) ? V4L2_PIX_FMT_BGR32 : V4L2_PIX_FMT_RGB32;
+        fourcc = (r_mask == 0xFF) ? V4L2_PIX_FMT_BGR24 : V4L2_PIX_FMT_RGB24;
+        break;
+      case 32:
+        fourcc = (r_mask == 0xFF) ? V4L2_PIX_FMT_BGR32 : V4L2_PIX_FMT_RGB32;
         break;
     }
   } else if (strcmp (mimetype, "video/x-dv") == 0) {
