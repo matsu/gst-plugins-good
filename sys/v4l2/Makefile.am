@@ -28,6 +28,7 @@ libgstvideo4linux2_la_CFLAGS =   $(GST_PLUGINS_BASE_CFLAGS) \
 				 $(GST_BASE_CFLAGS) \
 				 $(GST_CONTROLLER_CFLAGS) \
 				 $(GST_CFLAGS) \
+				 $(UIOMUX_CFLAGS) \
 				 $(X_CFLAGS) \
 				 $(LIBV4L2_CFLAGS) \
 				 $(GUDEV_CFLAGS)
@@ -42,6 +43,7 @@ libgstvideo4linux2_la_LIBADD =   $(GST_PLUGINS_BASE_LIBS) \
 				 -lgstvideo-$(GST_MAJORMINOR) \
 				 -lgstinterfaces-$(GST_MAJORMINOR) \
 				 $(GST_LIBS) \
+				 $(UIOMUX_LIBS) \
 				 $(xv_libs) \
 				 $(LIBV4L2_LIBS) \
 				 $(GUDEV_LIBS)

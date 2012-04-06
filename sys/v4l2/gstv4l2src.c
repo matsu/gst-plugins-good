@@ -63,8 +63,13 @@
 GST_DEBUG_CATEGORY (v4l2src_debug);
 #define GST_CAT_DEFAULT v4l2src_debug
 
+#if defined(HAVE_UIOMUX)
+#define PROP_DEF_QUEUE_SIZE         4
+#define PROP_DEF_ALWAYS_COPY        FALSE
+#else
 #define PROP_DEF_QUEUE_SIZE         2
 #define PROP_DEF_ALWAYS_COPY        TRUE
+#endif
 #define PROP_DEF_DECIMATE           1
 
 #define DEFAULT_PROP_DEVICE   "/dev/video0"
@@ -96,14 +101,14 @@ gst_v4l2src_iface_supported (GstImplementsInterface * iface, GType iface_type)
 
 #ifdef HAVE_XVIDEO
   if (!(iface_type == GST_TYPE_TUNER ||
-        iface_type == GST_TYPE_X_OVERLAY ||
-        iface_type == GST_TYPE_COLOR_BALANCE ||
-        iface_type == GST_TYPE_VIDEO_ORIENTATION))
+          iface_type == GST_TYPE_X_OVERLAY ||
+          iface_type == GST_TYPE_COLOR_BALANCE ||
+          iface_type == GST_TYPE_VIDEO_ORIENTATION))
     return FALSE;
 #else
   if (!(iface_type == GST_TYPE_TUNER ||
-        iface_type == GST_TYPE_COLOR_BALANCE ||
-        iface_type == GST_TYPE_VIDEO_ORIENTATION))
+          iface_type == GST_TYPE_COLOR_BALANCE ||
+          iface_type == GST_TYPE_VIDEO_ORIENTATION))
     return FALSE;
 #endif
 

@@ -572,6 +572,14 @@ return 0;
       AC_DEFINE(GST_V4L2_MISSING_BUFDECL, 1, [struct v4l2_buffer missing])
     fi
 
+    dnl check for libuiomux
+    PKG_CHECK_MODULES(UIOMUX, uiomux >= 1.6.2, HAVE_UIOMUX="yes", [
+    HAVE_UIOMUX="no"
+    ])
+    if test $HAVE_UIOMUX = "yes"; then
+      AC_DEFINE(HAVE_UIOMUX, 1, [Define if we have libuiomux])
+    fi
+
     dnl check for XOverlay libraries
     AG_GST_CHECK_XV
   fi

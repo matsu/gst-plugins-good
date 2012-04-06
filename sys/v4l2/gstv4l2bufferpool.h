@@ -27,6 +27,9 @@
 
 #include <gst/gst.h>
 #include "v4l2_calls.h"
+#if defined(HAVE_UIOMUX)
+#include "uiomux/uiomux.h"
+#endif
 
 GST_DEBUG_CATEGORY_EXTERN (v4l2buffer_debug);
 
@@ -52,6 +55,11 @@ typedef struct _GstV4l2Buffer GstV4l2Buffer;
 struct _GstV4l2BufferPool
 {
   GstMiniObject parent;
+
+#if defined(HAVE_UIOMUX)
+  UIOMux *uiomux;	     /* uiomux handle */
+  uiomux_resource_t uiores;  /* uiomux resource flag */
+#endif /* defined(HAVE_UIOMUX) */
 
   GstElement *v4l2elem;      /* the v4l2 src/sink that owns us.. maybe we should be owned by v4l2object? */
   gboolean requeuebuf;       /* if true, unusued buffers are automatically re-QBUF'd */

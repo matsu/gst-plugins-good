@@ -108,7 +108,12 @@ gst_v4l2_buffer_finalize (GstV4l2Buffer * buffer)
         "buffer %p (data %p, len %u) not recovered, unmapping",
         buffer, GST_BUFFER_DATA (buffer), buffer->vbuffer.length);
     gst_mini_object_unref (GST_MINI_OBJECT (pool));
+#if defined(HAVE_UIOMUX)
+    uiomux_free (pool->uiomux, pool->uiores, (void *) GST_BUFFER_DATA (buffer),
+        buffer->vbuffer.length);
+#else
     v4l2_munmap ((void *) GST_BUFFER_DATA (buffer), buffer->vbuffer.length);
+#endif
 
     GST_MINI_OBJECT_CLASS (v4l2buffer_parent_class)->finalize (GST_MINI_OBJECT
         (buffer));
@@ -166,7 +171,11 @@ gst_v4l2_buffer_new (GstV4l2BufferPool * pool, guint index, GstCaps * caps)
 
   ret->vbuffer.index = index;
   ret->vbuffer.type = pool->type;
+#if defined(HAVE_UIOMUX)
+  ret->vbuffer.memory = V4L2_MEMORY_USERPTR;
+#else
   ret->vbuffer.memory = V4L2_MEMORY_MMAP;
+#endif
 
   if (v4l2_ioctl (pool->video_fd, VIDIOC_QUERYBUF, &ret->vbuffer) < 0)
     goto querybuf_failed;
@@ -183,12 +192,21 @@ gst_v4l2_buffer_new (GstV4l2BufferPool * pool, guint index, GstCaps * caps)
   GST_LOG_OBJECT (pool->v4l2elem, "  length:    %u", ret->vbuffer.length);
   GST_LOG_OBJECT (pool->v4l2elem, "  input:     %u", ret->vbuffer.input);
 
+#if defined(HAVE_UIOMUX)
+  data = uiomux_malloc (pool->uiomux, pool->uiores, ret->vbuffer.length, 32);
+  if (data == NULL)
+    goto malloc_failed;
+
+  memset (data, 0, ret->vbuffer.length);
+  ret->vbuffer.m.userptr = (unsigned long) data;
+#else
   data = (guint8 *) v4l2_mmap (0, ret->vbuffer.length,
       PROT_READ | PROT_WRITE, MAP_SHARED, pool->video_fd,
       ret->vbuffer.m.offset);
 
   if (data == MAP_FAILED)
     goto mmap_failed;
+#endif
 
   GST_BUFFER_DATA (ret) = data;
   GST_BUFFER_SIZE (ret) = ret->vbuffer.length;
@@ -209,6 +227,17 @@ querybuf_failed:
     errno = errnosave;
     return NULL;
   }
+#if defined(HAVE_UIOMUX)
+malloc_failed:
+  {
+    gint errnosave = errno;
+
+    GST_WARNING ("Failed uiomux_malloc: %s", g_strerror (errnosave));
+    gst_buffer_unref (GST_BUFFER (ret));
+    errno = errnosave;
+    return NULL;
+  }
+#else
 mmap_failed:
   {
     gint errnosave = errno;
@@ -218,6 +247,7 @@ mmap_failed:
     errno = errnosave;
     return NULL;
   }
+#endif /* defined(HAVE_UIOMUX) */
 }
 
 
@@ -335,6 +365,9 @@ gst_v4l2_buffer_pool_new (GstElement * v4l2elem, gint fd, gint num_buffers,
   GstV4l2BufferPool *pool;
   gint n;
   struct v4l2_requestbuffers breq;
+#if defined(HAVE_UIOMUX)
+  const char *blocks[2] = { "VIO", NULL };
+#endif
 
   pool = (GstV4l2BufferPool *) gst_mini_object_new (GST_TYPE_V4L2_BUFFER_POOL);
 
@@ -342,6 +375,12 @@ gst_v4l2_buffer_pool_new (GstElement * v4l2elem, gint fd, gint num_buffers,
   if (pool->video_fd < 0)
     goto dup_failed;
 
+#if defined(HAVE_UIOMUX)
+  pool->uiores = 1 << 0;
+  pool->uiomux = uiomux_open_named (blocks);
+  if (pool->uiomux == NULL)
+    goto uiomux_failed;
+#endif
 
   /* first, lets request buffers, and see how many we can get: */
   GST_DEBUG_OBJECT (v4l2elem, "STREAMING, requesting %d MMAP buffers",
@@ -350,7 +389,11 @@ gst_v4l2_buffer_pool_new (GstElement * v4l2elem, gint fd, gint num_buffers,
   memset (&breq, 0, sizeof (struct v4l2_requestbuffers));
   breq.type = type;
   breq.count = num_buffers;
+#if defined(HAVE_UIOMUX)
+  breq.memory = V4L2_MEMORY_USERPTR;
+#else
   breq.memory = V4L2_MEMORY_MMAP;
+#endif
 
   if (v4l2_ioctl (fd, VIDIOC_REQBUFS, &breq) < 0)
     goto reqbufs_failed;
@@ -396,6 +439,14 @@ dup_failed:
 
     return NULL;
   }
+#if defined(HAVE_UIOMUX)
+uiomux_failed:
+  {
+    GST_ELEMENT_ERROR (v4l2elem, RESOURCE, READ,
+        (_("Failed uiomux_open")), (NULL));
+    return NULL;
+  }
+#endif /* defined(HAVE_UIOMUX) */
 reqbufs_failed:
   {
     GstV4l2Object *v4l2object = get_v4l2_object (v4l2elem);
@@ -540,7 +591,11 @@ gst_v4l2_buffer_pool_dqbuf (GstV4l2BufferPool * pool)
 
   memset (&buffer, 0x00, sizeof (buffer));
   buffer.type = pool->type;
+#if defined(HAVE_UIOMUX)
+  buffer.memory = V4L2_MEMORY_USERPTR;
+#else
   buffer.memory = V4L2_MEMORY_MMAP;
+#endif
 
 
   if (v4l2_ioctl (pool->video_fd, VIDIOC_DQBUF, &buffer) >= 0) {
