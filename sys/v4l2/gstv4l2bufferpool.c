@@ -513,6 +513,11 @@ gst_v4l2_buffer_pool_destroy (GstV4l2BufferPool * pool)
       gst_buffer_unref (buf);
   }
 
+#if defined(HAVE_UIOMUX)
+  if (pool->uiomux)
+    uiomux_close (pool->uiomux);
+#endif
+
   gst_mini_object_unref (GST_MINI_OBJECT (pool));
 }
 
