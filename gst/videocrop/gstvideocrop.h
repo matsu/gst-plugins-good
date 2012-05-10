@@ -76,6 +76,10 @@ struct _GstVideoCrop
 
   GstVideoCropImageDetails in;  /* details of input image */
   GstVideoCropImageDetails out; /* details of output image */
+
+  /* query for rowstride */
+  GstQueryType query_type_stride;
+  gboolean stride_supported;
 };
 
 struct _GstVideoCropClass

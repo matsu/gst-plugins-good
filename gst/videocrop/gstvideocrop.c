@@ -136,6 +136,7 @@ static gboolean gst_video_crop_set_caps (GstBaseTransform * trans,
     GstCaps * in_caps, GstCaps * outcaps);
 static gboolean gst_video_crop_src_event (GstBaseTransform * trans,
     GstEvent * event);
+static gboolean gst_video_crop_start (GstBaseTransform * trans);
 
 static void
 gst_video_crop_base_init (gpointer g_class)
@@ -228,6 +229,7 @@ gst_video_crop_class_init (GstVideoCropClass * klass)
   basetransform_class->set_caps = GST_DEBUG_FUNCPTR (gst_video_crop_set_caps);
   basetransform_class->get_unit_size =
       GST_DEBUG_FUNCPTR (gst_video_crop_get_unit_size);
+  basetransform_class->start = GST_DEBUG_FUNCPTR (gst_video_crop_start);
 
   basetransform_class->passthrough_on_same_caps = FALSE;
   basetransform_class->src_event = GST_DEBUG_FUNCPTR (gst_video_crop_src_event);
@@ -240,6 +242,10 @@ gst_video_crop_init (GstVideoCrop * vcrop, GstVideoCropClass * klass)
   vcrop->crop_left = 0;
   vcrop->crop_top = 0;
   vcrop->crop_bottom = 0;
+
+  /* register query type for rowstride */
+  vcrop->query_type_stride = gst_query_type_register ("stride-supported",
+      "whether dealing with rowstride as a capability or not");
 }
 
 static gboolean
@@ -667,6 +673,38 @@ cropping_too_much:
     GST_DEBUG_OBJECT (crop, "we are cropping too much");
     return FALSE;
   }
+}
+
+static gboolean
+gst_video_crop_query_stride_supported (GstVideoCrop * vcrop)
+{
+  gboolean result = FALSE;
+  GstPad *peer = gst_pad_get_peer (GST_BASE_TRANSFORM (vcrop)->srcpad);
+  GstStructure *structure;
+  GstQuery *query;
+
+  structure = gst_structure_empty_new ("GstQueryStrideSupported");
+  gst_structure_set (structure, "stride-supported", G_TYPE_BOOLEAN, FALSE,
+      NULL);
+
+  query = gst_query_new_application (vcrop->query_type_stride, structure);
+  if (gst_pad_query (peer, query))
+    gst_structure_get_boolean (structure, "stride-supported", &result);
+
+  gst_query_unref (query);
+  gst_object_unref (peer);
+
+  return result;
+}
+
+static gboolean
+gst_video_crop_start (GstBaseTransform * trans)
+{
+  GstVideoCrop *vcrop = GST_VIDEO_CROP (trans);
+
+  vcrop->stride_supported = gst_video_crop_query_stride_supported (vcrop);
+
+  return TRUE;
 }
 
 static void
