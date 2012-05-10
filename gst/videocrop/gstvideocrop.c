@@ -137,6 +137,8 @@ static gboolean gst_video_crop_set_caps (GstBaseTransform * trans,
 static gboolean gst_video_crop_src_event (GstBaseTransform * trans,
     GstEvent * event);
 static gboolean gst_video_crop_start (GstBaseTransform * trans);
+static GstFlowReturn gst_video_crop_prepare_output_buffer (GstBaseTransform *
+    trans, GstBuffer * input, gint size, GstCaps * caps, GstBuffer ** buf);
 
 static void
 gst_video_crop_base_init (gpointer g_class)
@@ -230,6 +232,8 @@ gst_video_crop_class_init (GstVideoCropClass * klass)
   basetransform_class->get_unit_size =
       GST_DEBUG_FUNCPTR (gst_video_crop_get_unit_size);
   basetransform_class->start = GST_DEBUG_FUNCPTR (gst_video_crop_start);
+  basetransform_class->prepare_output_buffer =
+      GST_DEBUG_FUNCPTR (gst_video_crop_prepare_output_buffer);
 
   basetransform_class->passthrough_on_same_caps = FALSE;
   basetransform_class->src_event = GST_DEBUG_FUNCPTR (gst_video_crop_src_event);
@@ -484,6 +488,13 @@ gst_video_crop_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 {
   GstVideoCrop *vcrop = GST_VIDEO_CROP (trans);
 
+  if (vcrop->stride_supported &&
+      ((vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE) ||
+          (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX))) {
+    GST_LOG_OBJECT (vcrop, "passthrough because of zero-copy cropping");
+    return GST_FLOW_OK;
+  }
+
   switch (vcrop->in.packing) {
     case VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE:
       gst_video_crop_transform_packed_simple (vcrop, inbuf, outbuf);
@@ -709,6 +720,43 @@ gst_video_crop_start (GstBaseTransform * trans)
   vcrop->stride_supported = gst_video_crop_query_stride_supported (vcrop);
 
   return TRUE;
+}
+
+static GstFlowReturn
+gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
+    GstBuffer * input, gint size, GstCaps * caps, GstBuffer ** buf)
+{
+  GstVideoCrop *vcrop = GST_VIDEO_CROP (trans);
+  guint sub_offset, sub_size;
+
+  if (!vcrop->stride_supported) {
+    GST_LOG_OBJECT
+        (vcrop,
+        "creating subbuffer isn't needed because downstream plugins don't support rowstride");
+    return GST_FLOW_OK;
+  }
+
+  if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE) {
+    sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+        (vcrop->crop_left * vcrop->in.bytes_per_pixel);
+  } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX) {
+    sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+        (ROUND_DOWN_2 (vcrop->crop_left) * vcrop->in.bytes_per_pixel);
+  } else {
+    GST_LOG_OBJECT (vcrop,
+        "can't do zero-copy cropping except for packed format");
+    return GST_FLOW_OK;
+  }
+
+  sub_size = vcrop->out.height * vcrop->out.stride;
+  *buf = gst_buffer_create_sub (input, sub_offset, sub_size);
+  if (*buf == NULL) {
+    GST_ERROR_OBJECT (vcrop, "failed to create subbuffer");
+    return GST_FLOW_ERROR;
+  }
+  gst_buffer_set_caps (*buf, caps);
+
+  return GST_FLOW_OK;
 }
 
 static void
