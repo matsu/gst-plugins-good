@@ -585,22 +585,22 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
   other_caps = gst_caps_new_empty ();
 
   for (i = 0; i < gst_caps_get_size (caps); ++i) {
-    const GValue *v;
+    const GValue *in_width, *in_height;
     GstStructure *structure, *new_structure;
     GValue w_val = { 0, }, h_val = {
     0,};
 
     structure = gst_caps_get_structure (caps, i);
 
-    v = gst_structure_get_value (structure, "width");
-    if (!gst_video_crop_transform_dimension_value (v, dx, &w_val)) {
+    in_width = gst_structure_get_value (structure, "width");
+    if (!gst_video_crop_transform_dimension_value (in_width, dx, &w_val)) {
       GST_WARNING_OBJECT (vcrop, "could not tranform width value with dx=%d"
           ", caps structure=%" GST_PTR_FORMAT, dx, structure);
       continue;
     }
 
-    v = gst_structure_get_value (structure, "height");
-    if (!gst_video_crop_transform_dimension_value (v, dy, &h_val)) {
+    in_height = gst_structure_get_value (structure, "height");
+    if (!gst_video_crop_transform_dimension_value (in_height, dy, &h_val)) {
       g_value_unset (&w_val);
       GST_WARNING_OBJECT (vcrop, "could not tranform height value with dy=%d"
           ", caps structure=%" GST_PTR_FORMAT, dy, structure);
@@ -610,6 +610,10 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     new_structure = gst_structure_copy (structure);
     gst_structure_set_value (new_structure, "width", &w_val);
     gst_structure_set_value (new_structure, "height", &h_val);
+
+    /* set rowstride when creating output caps */
+    if (vcrop->stride_supported && (direction == GST_PAD_SINK))
+      gst_structure_set_value (new_structure, "rowstride", in_width);
     g_value_unset (&w_val);
     g_value_unset (&h_val);
     GST_LOG_OBJECT (vcrop, "transformed structure %2d: %" GST_PTR_FORMAT
