@@ -628,6 +628,7 @@ gst_v4l2src_set_caps (GstBaseSrc * src, GstCaps * caps)
   struct v4l2_fmtdesc *format;
   guint fps_n, fps_d;
   guint size;
+  struct v4l2_format prev_format;
 
   v4l2src = GST_V4L2SRC (src);
 
@@ -635,21 +636,40 @@ gst_v4l2src_set_caps (GstBaseSrc * src, GstCaps * caps)
   if (!GST_V4L2_IS_OPEN (v4l2src->v4l2object))
     return FALSE;
 
-  /* make sure we stop capturing and dealloc buffers */
-  if (GST_V4L2_IS_ACTIVE (v4l2src->v4l2object)) {
-    /* both will throw an element-error on failure */
-    if (!gst_v4l2src_capture_stop (v4l2src))
-      return FALSE;
-    if (!gst_v4l2src_capture_deinit (v4l2src))
-      return FALSE;
-  }
-
   /* we want our own v4l2 type of fourcc codes */
   if (!gst_v4l2_object_get_caps_info (v4l2src->v4l2object, caps, &format, &w,
           &h, &interlaced, &fps_n, &fps_d, &size)) {
     GST_INFO_OBJECT (v4l2src,
         "can't get capture format from caps %" GST_PTR_FORMAT, caps);
     return FALSE;
+  }
+
+  /* make sure we stop capturing and dealloc buffers */
+  if (GST_V4L2_IS_ACTIVE (v4l2src->v4l2object)) {
+    memset (&prev_format, 0x00, sizeof (struct v4l2_format));
+    prev_format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (v4l2_ioctl (v4l2src->v4l2object->video_fd, VIDIOC_G_FMT,
+            &prev_format) < 0) {
+      GST_ERROR_OBJECT (v4l2src, "Call to G_FMT failed: (%s)",
+          g_strerror (errno));
+      return FALSE;
+    }
+
+    if (prev_format.fmt.pix.width == w &&
+        prev_format.fmt.pix.height == h &&
+        prev_format.fmt.pix.pixelformat == format->pixelformat &&
+        (v4l2src->fps_n == 0 || v4l2src->fps_n == fps_n) &&
+        (v4l2src->fps_d == 0 || v4l2src->fps_d == fps_d) &&
+        v4l2src->frame_byte_size == size) {
+      GST_LOG_OBJECT (v4l2src, "skip set caps because of no need to change");
+      return TRUE;
+    }
+
+    /* both will throw an element-error on failure */
+    if (!gst_v4l2src_capture_stop (v4l2src))
+      return FALSE;
+    if (!gst_v4l2src_capture_deinit (v4l2src))
+      return FALSE;
   }
 
   GST_DEBUG_OBJECT (v4l2src, "trying to set_capture %dx%d at %d/%d fps, "
