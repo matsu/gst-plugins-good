@@ -646,6 +646,8 @@ gst_v4l2src_set_caps (GstBaseSrc * src, GstCaps * caps)
 
   /* make sure we stop capturing and dealloc buffers */
   if (GST_V4L2_IS_ACTIVE (v4l2src->v4l2object)) {
+    gboolean caps_changed = FALSE;
+
     memset (&prev_format, 0x00, sizeof (struct v4l2_format));
     prev_format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (v4l2_ioctl (v4l2src->v4l2object->video_fd, VIDIOC_G_FMT,
@@ -655,14 +657,24 @@ gst_v4l2src_set_caps (GstBaseSrc * src, GstCaps * caps)
       return FALSE;
     }
 
-    if (prev_format.fmt.pix.width == w &&
-        prev_format.fmt.pix.height == h &&
-        prev_format.fmt.pix.pixelformat == format->pixelformat &&
-        (v4l2src->fps_n == 0 || v4l2src->fps_n == fps_n) &&
-        (v4l2src->fps_d == 0 || v4l2src->fps_d == fps_d) &&
-        v4l2src->frame_byte_size == size) {
+    if (prev_format.fmt.pix.width != w ||
+        prev_format.fmt.pix.height != h ||
+        prev_format.fmt.pix.pixelformat != format->pixelformat ||
+        (v4l2src->fps_n != 0 && v4l2src->fps_n != fps_n) ||
+        (v4l2src->fps_d != 0 && v4l2src->fps_d != fps_d) ||
+        v4l2src->frame_byte_size != size) {
+      caps_changed = TRUE;
+    }
+
+    if (!caps_changed) {
       GST_LOG_OBJECT (v4l2src, "skip set caps because of no need to change");
       return TRUE;
+    } else if (!v4l2src->always_copy && caps_changed) {
+      GST_ERROR_OBJECT (v4l2src,
+          "can't change caps if v4l2src->always_copy is FALSE");
+      return FALSE;
+    } else {
+      GST_LOG_OBJECT (v4l2src, "run set caps");
     }
 
     /* both will throw an element-error on failure */
