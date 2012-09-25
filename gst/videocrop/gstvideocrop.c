@@ -253,13 +253,11 @@ gst_video_crop_init (GstVideoCrop * vcrop, GstVideoCropClass * klass)
 }
 
 static gboolean
-gst_video_crop_get_image_details_from_caps (GstVideoCrop * vcrop,
-    GstVideoCropImageDetails * details, GstCaps * caps)
+gst_video_crop_get_image_details_from_structure (GstVideoCrop * vcrop,
+    GstVideoCropImageDetails * details, GstStructure * structure)
 {
-  GstStructure *structure;
   gint width, height;
 
-  structure = gst_caps_get_structure (caps, 0);
   if (!gst_structure_get_int (structure, "width", &width) ||
       !gst_structure_get_int (structure, "height", &height)) {
     goto incomplete_format;
@@ -353,6 +351,18 @@ incomplete_format:
         ("Incomplete caps, some required field is missing"));
     return FALSE;
   }
+}
+
+static gboolean
+gst_video_crop_get_image_details_from_caps (GstVideoCrop * vcrop,
+    GstVideoCropImageDetails * details, GstCaps * caps)
+{
+  GstStructure *structure;
+
+  structure = gst_caps_get_structure (caps, 0);
+
+  return gst_video_crop_get_image_details_from_structure (vcrop, details,
+      structure);
 }
 
 static gboolean
