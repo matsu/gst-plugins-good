@@ -633,8 +633,16 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     gst_structure_set_value (new_structure, "height", &h_val);
 
     /* set rowstride when creating output caps */
-    if (vcrop->stride_supported && (direction == GST_PAD_SINK))
-      gst_structure_set_value (new_structure, "rowstride", in_width);
+    if (vcrop->stride_supported && (direction == GST_PAD_SINK)) {
+      GstVideoCropImageDetails img_details = { 0, };
+      GValue stride = { 0, };
+
+      gst_video_crop_get_image_details_from_structure (vcrop, &img_details,
+          structure);
+      g_value_init (&stride, G_TYPE_INT);
+      g_value_set_int (&stride, (gint) img_details.stride);
+      gst_structure_set_value (new_structure, "rowstride", &stride);
+    }
     g_value_unset (&w_val);
     g_value_unset (&h_val);
     GST_LOG_OBJECT (vcrop, "transformed structure %2d: %" GST_PTR_FORMAT
