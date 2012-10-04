@@ -83,7 +83,6 @@ struct _GstVideoCrop
 
   /* query for rowstride */
   GstQueryType query_type_stride;
-  gboolean stride_supported;
 };
 
 struct _GstVideoCropClass
