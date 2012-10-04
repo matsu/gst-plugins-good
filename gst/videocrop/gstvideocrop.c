@@ -102,6 +102,7 @@ enum
   GST_VIDEO_CAPS_YUV ("Y800") ";"                \
   GST_VIDEO_CAPS_YUV ("I420") ";"                \
   GST_VIDEO_CAPS_YUV ("YV12") ";"                \
+  GST_VIDEO_CAPS_YUV ("NV12") ";"                \
   GST_VIDEO_CAPS_RGB_16 ";"                      \
   GST_VIDEO_CAPS_RGB_15 ";"			 \
   GST_VIDEO_CAPS_GRAY
