@@ -522,7 +522,8 @@ gst_video_crop_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 
   if (vcrop->stride_supported &&
       ((vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE) ||
-          (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX))) {
+          (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX) ||
+          (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR))) {
     GST_LOG_OBJECT (vcrop, "passthrough because of zero-copy cropping");
     return GST_FLOW_OK;
   }
@@ -634,6 +635,7 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     0,};
     GstVideoCropImageDetails img_details = { 0, };
     guint rowstride;
+    gint chroma_byte_offset, delta_chroma_offs;
 
     structure = gst_caps_get_structure (caps, i);
 
@@ -656,7 +658,7 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     gst_structure_set_value (new_structure, "width", &w_val);
     gst_structure_set_value (new_structure, "height", &h_val);
 
-    /* set rowstride when creating output caps */
+    /* set rowstride and adjust chroma_byte_offset when creating output caps */
     if (!GST_VALUE_HOLDS_INT_RANGE (&w_val) &&
         !GST_VALUE_HOLDS_INT_RANGE (&h_val)) {
       if (!gst_video_crop_get_image_details_from_structure (vcrop, &img_details,
@@ -665,19 +667,41 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
         goto add_structure;
       }
     } else {
-      GST_LOG_OBJECT (vcrop, "go through setting rowstride");
+      GST_LOG_OBJECT (vcrop,
+          "go through setting rowstride and adjusting chroma_byte_offset");
       goto add_structure;
     }
 
     if (img_details.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE ||
-        img_details.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX)
+        img_details.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX) {
       rowstride = img_details.stride;
-    else
+      delta_chroma_offs = 0;
+    } else if (img_details.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR) {
+      guint ratio_y_c;
+
+      rowstride = img_details.stride;
+      /* Y plane / UV plane */
+      ratio_y_c = img_details.uv_off / (img_details.size - img_details.uv_off);
+      delta_chroma_offs = rowstride * vcrop->crop_top / ratio_y_c;
+    } else {
       rowstride = 0;
+      delta_chroma_offs = 0;
+    }
 
     if (vcrop->stride_supported && (direction == GST_PAD_SINK) && rowstride)
       gst_structure_set (new_structure, "rowstride", G_TYPE_INT,
           (gint) rowstride, NULL);
+
+    if (vcrop->stride_supported &&
+        gst_structure_get_int (structure, "chroma_byte_offset",
+            &chroma_byte_offset) && delta_chroma_offs) {
+      /* Adjust chroma_byte_offset because it would exceed the proper value
+         by delta_chroma_offs. It is due to offsetting the buffer address that
+         indicates Y plane with subbuffer for zero-copy cropping. */
+      chroma_byte_offset -= delta_chroma_offs;
+      gst_structure_set (new_structure, "chroma_byte_offset", G_TYPE_INT,
+          chroma_byte_offset, NULL);
+    }
 
   add_structure:
     g_value_unset (&w_val);
@@ -797,6 +821,9 @@ gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
   } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX) {
     sub_offset = (vcrop->crop_top * vcrop->in.stride) +
         (ROUND_DOWN_2 (vcrop->crop_left) * vcrop->in.bytes_per_pixel);
+  } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR) {
+    sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+        ROUND_DOWN_2 (vcrop->crop_left);
   } else {
     GST_LOG_OBJECT (vcrop,
         "can't do zero-copy cropping except for packed format");
