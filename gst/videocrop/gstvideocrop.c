@@ -610,6 +610,8 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     GstStructure *structure, *new_structure;
     GValue w_val = { 0, }, h_val = {
     0,};
+    GstVideoCropImageDetails img_details = { 0, };
+    guint rowstride;
 
     structure = gst_caps_get_structure (caps, i);
 
@@ -633,17 +635,29 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     gst_structure_set_value (new_structure, "height", &h_val);
 
     /* set rowstride when creating output caps */
-    if (vcrop->stride_supported && (direction == GST_PAD_SINK)) {
-      GstVideoCropImageDetails img_details = { 0, };
-
-      if (!GST_VALUE_HOLDS_INT_RANGE (&w_val) &&
-          !GST_VALUE_HOLDS_INT_RANGE (&h_val) &&
-          gst_video_crop_get_image_details_from_structure (vcrop, &img_details,
+    if (!GST_VALUE_HOLDS_INT_RANGE (&w_val) &&
+        !GST_VALUE_HOLDS_INT_RANGE (&h_val)) {
+      if (!gst_video_crop_get_image_details_from_structure (vcrop, &img_details,
               structure)) {
-        gst_structure_set (new_structure, "rowstride", G_TYPE_INT,
-            (gint) img_details.stride, NULL);
+        GST_ERROR_OBJECT (vcrop, "couldn't get image details from structure");
+        goto add_structure;
       }
+    } else {
+      GST_LOG_OBJECT (vcrop, "go through setting rowstride");
+      goto add_structure;
     }
+
+    if (img_details.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE ||
+        img_details.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX)
+      rowstride = img_details.stride;
+    else
+      rowstride = 0;
+
+    if (vcrop->stride_supported && (direction == GST_PAD_SINK) && rowstride)
+      gst_structure_set (new_structure, "rowstride", G_TYPE_INT,
+          (gint) rowstride, NULL);
+
+  add_structure:
     g_value_unset (&w_val);
     g_value_unset (&h_val);
     GST_LOG_OBJECT (vcrop, "transformed structure %2d: %" GST_PTR_FORMAT
