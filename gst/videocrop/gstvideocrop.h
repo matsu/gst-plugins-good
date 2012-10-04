@@ -37,7 +37,8 @@ G_BEGIN_DECLS
 {
   VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE = 0,    /* RGBx, AYUV */
   VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX,       /* UYVY, YVYU */
-  VIDEO_CROP_PIXEL_FORMAT_PLANAR        /* I420, YV12 */
+  VIDEO_CROP_PIXEL_FORMAT_PLANAR,       /* I420, YV12 */
+  VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR   /* NV12 */
 } VideoCropPixelFormat;
 
 typedef struct _GstVideoCropImageDetails GstVideoCropImageDetails;
@@ -51,7 +52,7 @@ struct _GstVideoCropImageDetails
   guint size;
 
   /* for packed RGB and YUV */
-  guint stride;
+  guint stride;                 /* common use in semi-planar */
   guint bytes_per_pixel;
   guint8 macro_y_off;           /* for YUY2, YVYU, UYVY, Y offset within macropixel in bytes */
 
@@ -59,6 +60,9 @@ struct _GstVideoCropImageDetails
   guint y_stride, y_off;
   guint u_stride, u_off;
   guint v_stride, v_off;
+
+  /* for semi-planar YUV */
+  guint uv_off;
 };
 
 typedef struct _GstVideoCrop GstVideoCrop;

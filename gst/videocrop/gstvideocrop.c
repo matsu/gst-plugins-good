@@ -328,6 +328,27 @@ gst_video_crop_get_image_details_from_structure (GstVideoCrop * vcrop,
             details->v_stride * (GST_ROUND_UP_2 (height) / 2);
         break;
       }
+      case GST_MAKE_FOURCC ('N', 'V', '1', '2'):
+      {
+        gint stride, chroma_byte_offset;
+
+        details->packing = VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR;
+
+        if (gst_structure_get_int (structure, "rowstride", &stride))
+          details->stride = stride;
+        else
+          details->stride = GST_ROUND_UP_2 (width);
+
+        details->y_off = 0;
+        if (gst_structure_get_int (structure, "chroma_byte_offset",
+                &chroma_byte_offset))
+          details->uv_off = chroma_byte_offset;
+        else
+          details->uv_off = details->stride * GST_ROUND_UP_2 (height);
+
+        details->size = details->uv_off * 3 / 2;
+      }
+        break;
       default:
         goto unknown_format;
     }
