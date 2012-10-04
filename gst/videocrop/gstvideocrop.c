@@ -781,7 +781,7 @@ gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
     return GST_FLOW_OK;
   }
 
-  sub_size = vcrop->out.height * vcrop->out.stride;
+  sub_size = vcrop->in.size - sub_offset;
   *buf = gst_buffer_create_sub (input, sub_offset, sub_size);
   if (*buf == NULL) {
     GST_ERROR_OBJECT (vcrop, "failed to create subbuffer");
