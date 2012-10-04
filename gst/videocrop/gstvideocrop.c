@@ -637,11 +637,14 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
       GstVideoCropImageDetails img_details = { 0, };
       GValue stride = { 0, };
 
-      gst_video_crop_get_image_details_from_structure (vcrop, &img_details,
-          structure);
-      g_value_init (&stride, G_TYPE_INT);
-      g_value_set_int (&stride, (gint) img_details.stride);
-      gst_structure_set_value (new_structure, "rowstride", &stride);
+      if (!GST_VALUE_HOLDS_INT_RANGE (&w_val) &&
+          !GST_VALUE_HOLDS_INT_RANGE (&h_val) &&
+          gst_video_crop_get_image_details_from_structure (vcrop, &img_details,
+              structure)) {
+        g_value_init (&stride, G_TYPE_INT);
+        g_value_set_int (&stride, (gint) img_details.stride);
+        gst_structure_set_value (new_structure, "rowstride", &stride);
+      }
     }
     g_value_unset (&w_val);
     g_value_unset (&h_val);
