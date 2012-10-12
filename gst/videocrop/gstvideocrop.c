@@ -677,11 +677,23 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
       delta_chroma_offs = 0;
     } else if (img_details.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR) {
       guint ratio_y_c;
+      GstStructure *structure;
+      gint tile_height;
 
       rowstride = img_details.stride;
       /* Y plane / UV plane */
       ratio_y_c = img_details.uv_off / (img_details.size - img_details.uv_off);
       delta_chroma_offs = rowstride * vcrop->crop_top / ratio_y_c;
+
+      /* set tile boudary for T/L addressing */
+      structure = gst_caps_get_structure (caps, 0);
+      if (gst_structure_get_int (structure, "tile-height", &tile_height)) {
+        gst_structure_set (new_structure, "tile_boundary_y_offset",
+            G_TYPE_INT, vcrop->crop_top % tile_height, NULL);
+
+        gst_structure_set (new_structure, "tile_boundary_c_offset",
+            G_TYPE_INT, vcrop->crop_top / ratio_y_c % tile_height, NULL);
+      }
     } else {
       rowstride = 0;
       delta_chroma_offs = 0;
