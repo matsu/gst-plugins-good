@@ -679,20 +679,44 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
       guint ratio_y_c;
       GstStructure *structure;
       gint tile_height;
+      gboolean interlaced;
+      const gchar *layout;
+
+      structure = gst_caps_get_structure (caps, 0);
+      if (gst_structure_get_boolean (structure, "interlaced", &interlaced) &&
+          (interlaced == TRUE) &&
+          ((layout =
+                  gst_structure_get_string (structure, "field-layout")) != NULL)
+          && (strcmp (layout, "sequential") == 0))
+        vcrop->interlaced = TRUE;
+      else
+        vcrop->interlaced = FALSE;
 
       rowstride = img_details.stride;
       /* Y plane / UV plane */
       ratio_y_c = img_details.uv_off / (img_details.size - img_details.uv_off);
-      delta_chroma_offs = rowstride * vcrop->crop_top / ratio_y_c;
+      if (vcrop->interlaced)
+        delta_chroma_offs = rowstride * vcrop->crop_top / ratio_y_c / 2;
+      else
+        delta_chroma_offs = rowstride * vcrop->crop_top / ratio_y_c;
 
       /* set tile boudary for T/L addressing */
-      structure = gst_caps_get_structure (caps, 0);
       if (gst_structure_get_int (structure, "tile-height", &tile_height)) {
+        gint tile_y_offs, tile_c_offs;
+
+        if (vcrop->interlaced) {
+          tile_y_offs = vcrop->crop_top / 2 % tile_height;
+          tile_c_offs = vcrop->crop_top / ratio_y_c / 2 % tile_height;
+        } else {
+          tile_y_offs = vcrop->crop_top % tile_height;
+          tile_c_offs = vcrop->crop_top / ratio_y_c % tile_height;
+        }
+
         gst_structure_set (new_structure, "tile_boundary_y_offset",
-            G_TYPE_INT, vcrop->crop_top % tile_height, NULL);
+            G_TYPE_INT, tile_y_offs, NULL);
 
         gst_structure_set (new_structure, "tile_boundary_c_offset",
-            G_TYPE_INT, vcrop->crop_top / ratio_y_c % tile_height, NULL);
+            G_TYPE_INT, tile_c_offs, NULL);
       }
     } else {
       rowstride = 0;
@@ -830,8 +854,15 @@ gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
     sub_offset = (vcrop->crop_top * vcrop->in.stride) +
         (ROUND_DOWN_2 (vcrop->crop_left) * vcrop->in.bytes_per_pixel);
   } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR) {
-    sub_offset = (vcrop->crop_top * vcrop->in.stride) +
-        ROUND_DOWN_2 (vcrop->crop_left);
+    GstStructure *structure;
+
+    structure = gst_caps_get_structure (caps, 0);
+    if (vcrop->interlaced)
+      sub_offset = (vcrop->crop_top / 2 * vcrop->in.stride) +
+          ROUND_DOWN_2 (vcrop->crop_left);
+    else
+      sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+          ROUND_DOWN_2 (vcrop->crop_left);
   } else {
     GST_LOG_OBJECT (vcrop,
         "can't do zero-copy cropping except for packed format");
