@@ -140,6 +140,9 @@ static gboolean gst_video_crop_src_event (GstBaseTransform * trans,
 static GstFlowReturn gst_video_crop_prepare_output_buffer (GstBaseTransform *
     trans, GstBuffer * input, gint size, GstCaps * caps, GstBuffer ** buf);
 static gboolean gst_video_crop_query_stride_supported (GstVideoCrop * vcrop);
+static gboolean gst_videocrop_transform_size (GstBaseTransform * trans,
+    GstPadDirection direction, GstCaps * caps, guint size, GstCaps * othercaps,
+    guint * othersize);
 
 static void
 gst_video_crop_base_init (gpointer g_class)
@@ -234,6 +237,8 @@ gst_video_crop_class_init (GstVideoCropClass * klass)
       GST_DEBUG_FUNCPTR (gst_video_crop_get_unit_size);
   basetransform_class->prepare_output_buffer =
       GST_DEBUG_FUNCPTR (gst_video_crop_prepare_output_buffer);
+  basetransform_class->transform_size =
+      GST_DEBUG_FUNCPTR (gst_videocrop_transform_size);
 
   basetransform_class->passthrough_on_same_caps = FALSE;
   basetransform_class->src_event = GST_DEBUG_FUNCPTR (gst_video_crop_src_event);
@@ -838,7 +843,6 @@ gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
     GstBuffer * input, gint size, GstCaps * caps, GstBuffer ** buf)
 {
   GstVideoCrop *vcrop = GST_VIDEO_CROP (trans);
-  guint sub_offset, sub_size;
 
   if (!gst_video_crop_query_stride_supported (vcrop)) {
     GST_LOG_OBJECT
@@ -847,30 +851,7 @@ gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
     return GST_FLOW_OK;
   }
 
-  if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE) {
-    sub_offset = (vcrop->crop_top * vcrop->in.stride) +
-        (vcrop->crop_left * vcrop->in.bytes_per_pixel);
-  } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX) {
-    sub_offset = (vcrop->crop_top * vcrop->in.stride) +
-        (ROUND_DOWN_2 (vcrop->crop_left) * vcrop->in.bytes_per_pixel);
-  } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR) {
-    GstStructure *structure;
-
-    structure = gst_caps_get_structure (caps, 0);
-    if (vcrop->interlaced)
-      sub_offset = (vcrop->crop_top / 2 * vcrop->in.stride) +
-          ROUND_DOWN_2 (vcrop->crop_left);
-    else
-      sub_offset = (vcrop->crop_top * vcrop->in.stride) +
-          ROUND_DOWN_2 (vcrop->crop_left);
-  } else {
-    GST_LOG_OBJECT (vcrop,
-        "can't do zero-copy cropping except for packed format");
-    return GST_FLOW_OK;
-  }
-
-  sub_size = vcrop->in.size - sub_offset;
-  *buf = gst_buffer_create_sub (input, sub_offset, sub_size);
+  *buf = gst_buffer_create_sub (input, vcrop->in.size - size, size);
   if (*buf == NULL) {
     GST_ERROR_OBJECT (vcrop, "failed to create subbuffer");
     return GST_FLOW_ERROR;
@@ -878,6 +859,95 @@ gst_video_crop_prepare_output_buffer (GstBaseTransform * trans,
   gst_buffer_set_caps (*buf, caps);
 
   return GST_FLOW_OK;
+}
+
+static gboolean
+gst_videocrop_transform_size (GstBaseTransform * trans,
+    GstPadDirection direction, GstCaps * caps, guint size, GstCaps * othercaps,
+    guint * othersize)
+{
+  GstVideoCrop *vcrop = GST_VIDEO_CROP (trans);
+  guint inunitsize;
+
+  if (!gst_video_crop_query_stride_supported (vcrop) ||
+      direction == GST_PAD_SRC) {
+    guint outunitsize, units;
+
+    if (!gst_video_crop_get_unit_size (trans, caps, &inunitsize))
+      goto no_in_size;
+
+    GST_DEBUG_OBJECT (vcrop, "input size %d, input unit size %d", size,
+        inunitsize);
+
+    /* input size must be a multiple of the unit_size of the input caps */
+    if (inunitsize == 0 || (size % inunitsize != 0))
+      goto no_multiple;
+
+    /* get the amount of units */
+    units = size / inunitsize;
+
+    /* now get the unit size of the output */
+    if (!gst_video_crop_get_unit_size (trans, othercaps, &outunitsize))
+      goto no_out_size;
+
+    /* the output size is the unit_size times the amount of units on the
+     * input */
+    *othersize = units * outunitsize;
+  } else {
+    guint sub_offset;
+
+    /* Calculate a subbufer size for zero-copy cropping. The subbuffer is
+       created in prepare_output_buffer (). */
+    if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_SIMPLE) {
+      sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+          (vcrop->crop_left * vcrop->in.bytes_per_pixel);
+    } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_PACKED_COMPLEX) {
+      sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+          (ROUND_DOWN_2 (vcrop->crop_left) * vcrop->in.bytes_per_pixel);
+    } else if (vcrop->in.packing == VIDEO_CROP_PIXEL_FORMAT_SEMI_PLANAR) {
+      GstStructure *structure;
+
+      structure = gst_caps_get_structure (caps, 0);
+      if (vcrop->interlaced)
+        sub_offset = (vcrop->crop_top / 2 * vcrop->in.stride) +
+            ROUND_DOWN_2 (vcrop->crop_left);
+      else
+        sub_offset = (vcrop->crop_top * vcrop->in.stride) +
+            ROUND_DOWN_2 (vcrop->crop_left);
+    } else {
+      GST_LOG_OBJECT (vcrop,
+          "can't do zero-copy cropping except for packed format");
+      return FALSE;
+    }
+
+    *othersize = vcrop->in.size - sub_offset;
+  }
+
+  GST_DEBUG_OBJECT (vcrop, "transformed size to %d", *othersize);
+
+  return TRUE;
+
+  /* ERRORS */
+no_in_size:
+  {
+    GST_DEBUG_OBJECT (vcrop, "could not get in_size");
+    g_warning ("%s: could not get in_size", GST_ELEMENT_NAME (trans));
+    return FALSE;
+  }
+no_multiple:
+  {
+    GST_DEBUG_OBJECT (vcrop, "Size %u is not a multiple of unit size %u", size,
+        inunitsize);
+    g_warning ("%s: size %u is not a multiple of unit size %u",
+        GST_ELEMENT_NAME (trans), size, inunitsize);
+    return FALSE;
+  }
+no_out_size:
+  {
+    GST_DEBUG_OBJECT (vcrop, "could not get out_size");
+    g_warning ("%s: could not get out_size", GST_ELEMENT_NAME (trans));
+    return FALSE;
+  }
 }
 
 static void
