@@ -604,6 +604,26 @@ gst_video_crop_transform_dimension_value (const GValue * src_val,
   return ret;
 }
 
+static gboolean
+gst_video_crop_is_interlaced (GstCaps * caps)
+{
+  gboolean interlaced;
+  const gchar *layout;
+  GstStructure *structure;
+  gboolean result;
+
+  structure = gst_caps_get_structure (caps, 0);
+  if (gst_structure_get_boolean (structure, "interlaced", &interlaced) &&
+      (interlaced == TRUE) &&
+      ((layout = gst_structure_get_string (structure, "field-layout")) != NULL)
+      && (strcmp (layout, "sequential") == 0))
+    result = TRUE;
+  else
+    result = FALSE;
+
+  return result;
+}
+
 static GstCaps *
 gst_video_crop_transform_caps (GstBaseTransform * trans,
     GstPadDirection direction, GstCaps * caps)
@@ -687,18 +707,10 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
       guint ratio_y_c;
       GstStructure *structure;
       gint tile_height;
-      gboolean interlaced;
-      const gchar *layout;
 
       structure = gst_caps_get_structure (caps, 0);
-      if (gst_structure_get_boolean (structure, "interlaced", &interlaced) &&
-          (interlaced == TRUE) &&
-          ((layout =
-                  gst_structure_get_string (structure, "field-layout")) != NULL)
-          && (strcmp (layout, "sequential") == 0))
-        vcrop->interlaced = TRUE;
-      else
-        vcrop->interlaced = FALSE;
+
+      vcrop->interlaced = gst_video_crop_is_interlaced (caps);
 
       rowstride = img_details.stride;
       /* Y plane / UV plane */
