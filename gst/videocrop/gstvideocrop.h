@@ -67,6 +67,7 @@ struct _GstVideoCropImageDetails
 
 typedef struct _GstVideoCrop GstVideoCrop;
 typedef struct _GstVideoCropClass GstVideoCropClass;
+typedef struct _GstVideoCropRectangle GstVideoCropRectangle;
 
 struct _GstVideoCrop
 {
@@ -93,6 +94,14 @@ struct _GstVideoCropClass
 };
 
 GType gst_video_crop_get_type (void);
+
+struct _GstVideoCropRectangle
+{
+  gint left;
+  gint right;
+  gint top;
+  gint bottom;
+};
 
 G_END_DECLS
 #endif /* __GST_VIDEO_CROP_H__ */
