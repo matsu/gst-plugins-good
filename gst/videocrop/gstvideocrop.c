@@ -642,6 +642,8 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
   GST_LOG_OBJECT (vcrop, "l=%d,r=%d,b=%d,t=%d",
       vcrop->crop_left, vcrop->crop_right, vcrop->crop_bottom, vcrop->crop_top);
 
+  vcrop->interlaced = gst_video_crop_is_interlaced (caps);
+
   if (direction == GST_PAD_SRC) {
     dx = vcrop->crop_left + vcrop->crop_right;
     dy = vcrop->crop_top + vcrop->crop_bottom;
@@ -709,8 +711,6 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
       gint tile_height;
 
       structure = gst_caps_get_structure (caps, 0);
-
-      vcrop->interlaced = gst_video_crop_is_interlaced (caps);
 
       rowstride = img_details.stride;
       /* Y plane / UV plane */
