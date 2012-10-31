@@ -956,10 +956,12 @@ gst_videocrop_transform_size (GstBaseTransform * trans,
     guint sub_offset;
     GstVideoCropRectangle rounded_rect;
 
+    GST_OBJECT_LOCK (vcrop);
     rounded_rect.top = vcrop->crop_top;
     rounded_rect.bottom = vcrop->crop_bottom;
     rounded_rect.left = vcrop->crop_left;
     rounded_rect.right = vcrop->crop_right;
+    GST_OBJECT_UNLOCK (vcrop);
     gst_video_crop_round_down_crop_properties (vcrop, caps, &rounded_rect);
 
     /* Calculate a subbufer size for zero-copy cropping. The subbuffer is
