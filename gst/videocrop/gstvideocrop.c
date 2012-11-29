@@ -614,6 +614,9 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
 
   vcrop = GST_VIDEO_CROP (trans);
 
+  if (gst_base_transform_is_passthrough (trans))
+    return gst_caps_ref (caps);
+
   GST_OBJECT_LOCK (vcrop);
 
   GST_LOG_OBJECT (vcrop, "l=%d,r=%d,b=%d,t=%d",
