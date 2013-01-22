@@ -873,13 +873,15 @@ static gboolean
 gst_video_crop_query_stride_supported (GstVideoCrop * vcrop)
 {
   static gboolean result = FALSE;
-  GstPad *peer = gst_pad_get_peer (GST_BASE_TRANSFORM (vcrop)->srcpad);
+  GstPad *peer;
   GstStructure *structure;
   GstQuery *query;
   static gboolean is_query_done = FALSE;
 
   if (is_query_done)
     return result;
+
+  peer = gst_pad_get_peer (GST_BASE_TRANSFORM (vcrop)->srcpad);
 
   structure = gst_structure_empty_new ("GstQueryStrideSupported");
   gst_structure_set (structure, "stride-supported", G_TYPE_BOOLEAN, FALSE,
